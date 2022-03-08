@@ -1,0 +1,592 @@
+
+snapshotDirectory D:\Desktop\igv\output
+
+
+goto chr1:629062-629433
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000225972
+
+goto chr1:28982278-28982608
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000225616
+
+goto chr1:35509742-35511438
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000236274
+
+goto chr1:64941979-64942365
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000233877
+
+goto chr1:92755794-92756956
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000223896
+
+goto chr1:108766841-108767584
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000228076
+
+goto chr1:113168994-113169403
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000233839
+
+goto chr1:228650241-228651379
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000183929
+
+goto chr1:235295865-235296335
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000236863
+
+goto chr2:60682873-60683244
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000271134
+
+goto chr2:77788382-77793087
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000237077
+
+goto chr2:78412793-78413094
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000214429
+
+goto chr2:108276812-108277942
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000227597
+
+goto chr2:130012065-130040560
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000180178
+
+goto chr2:153420677-153421957
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000242575
+
+goto chr2:174171891-174172725
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000270799
+
+goto chr2:222904640-222905055
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000224121
+
+goto chr2:223704621-223705338
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000226539
+
+goto chr2:233545482-233547032
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000271639
+
+goto chr3:17465150-17465510
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000227309
+
+goto chr3:57800056-57801448
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000270772
+
+goto chr3:65843890-65844446
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000223409
+
+goto chr3:134783436-134783555
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000201413
+
+goto chr3:136899076-136900076
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000214283
+
+goto chr3:151188099-151188223
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000199994
+
+goto chr3:180161886-180161977
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000201822
+
+goto chr4:39973128-39973442
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000250568
+
+goto chr4:102751401-102752641
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000251288
+
+goto chr4:116043407-116044045
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000250442
+
+goto chr4:124462863-124463790
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000248565
+
+goto chr4:187746094-187748199
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000249162
+
+goto chr5:38429892-38430160
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000248234
+
+goto chr5:171365595-171367693
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000254256
+
+goto chr6:4427963-4428081
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000201185
+
+goto chr6:9596110-10211608
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000181355
+
+goto chr6:43310231-43310357
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000219222
+
+goto chr6:87173368-87174303
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000218313
+
+goto chr6:128580113-128580884
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000213130
+
+goto chr7:34750253-34752053
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000230356
+
+goto chr7:103262000-103262311
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000237632
+
+goto chr7:107450083-107450362
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000228341
+
+goto chr7:111411319-111411883
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000227948
+
+goto chr7:121440834-121441261
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000234985
+
+goto chr7:127857852-127858488
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000240579
+
+goto chr7:128697439-128697556
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000201041
+
+goto chr7:131242590-131242995
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000233287
+
+goto chrX:6422092-6422701
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000237730
+
+goto chrX:52448587-52451138
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000250084
+
+goto chrX:74105572-74107958
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000223650
+
+goto chrX:74185929-74187153
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000204113
+
+goto chrX:124326175-124326258
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000226532
+
+goto chrX:131795657-131796167
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000241418
+
+goto chrX:137324972-137325049
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000214748
+
+goto chr8:66767400-66768005
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000213005
+
+goto chr8:99340305-99341761
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000237704
+
+goto chr8:120635558-120638204
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000250290
+
+goto chr8:128009551-128011938
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000278275
+
+goto chr9:4781475-4782078
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000220105
+
+goto chr9:21455484-21456049
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000238271
+
+goto chr9:31253901-31254777
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000232203
+
+goto chr9:34191555-34191881
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000227383
+
+goto chr9:42972386-42973289
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000213816
+
+goto chr9:71589601-71589933
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000229814
+
+goto chr11:111889199-111889474
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000176343
+
+goto chr10:6293100-6294684
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000226705
+
+goto chr10:21110682-21113388
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000228219
+
+goto chr10:86854696-86856236
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000270874
+
+goto chr12:9155881-9156372
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000256817
+
+goto chr12:28505394-28505528
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000202187
+
+goto chr12:32863118-32863433
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000244743
+
+goto chr12:104125236-104125356
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000199415
+
+goto chr13:41925598-41927349
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000229696
+
+goto chr14:19268853-19337730
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000244306
+
+goto chr14:30821419-30821843
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000213867
+
+goto chr15:52095295-52095747
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000242327
+
+goto chr15:56192353-56193262
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000261072
+
+goto chr15:67232446-67232837
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000242634
+
+goto chr16:1286351-1288837
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000260284
+
+goto chr16:31894542-31894983
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000259950
+
+goto chr16:34162959-34163110
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000200434
+
+goto chr16:48600176-48600644
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000260033
+
+goto chr16:76235055-76235623
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000244485
+
+goto chr16:85815873-85816536
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000214259
+
+goto chr17:27274107-27274477
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000239223
+
+goto chr17:41448183-41454055
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000236473
+
+goto chr17:63849292-63864379
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000240280
+
+goto chr18:832238-832469
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000266575
+
+goto chr20:5532878-5533335
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000225831
+
+goto chr20:46099518-46100176
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000213820
+
+goto chr20:57357426-57358369
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000228995
+
+goto chr19:10037803-10074135
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000167798
+
+goto chr19:12260126-12260537
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000213293
+
+goto chr19:15564074-15584709
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000269516
+
+goto chr19:36901742-36902117
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000243297
+
+goto chr19:46196238-46197323
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000268879
+
+goto chrY:10197256-10199103
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000225840
+
+goto chr21:38238227-38238664
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000231123
+
+goto chr21:39235386-39236020
+squish
+sort position
+setSleepInterval 2000
+snapshot ENSG00000229623
+

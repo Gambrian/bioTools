@@ -1,0 +1,705 @@
+---
+title: "SingCellRNASeq"
+author: "jmzhang"
+date: "2021/7/31"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r message=FALSE, warning=FALSE}
+library(tidyverse, warn.conflicts = F)
+library(RColorBrewer, warn.conflicts = F)
+library(Seurat, warn.conflicts = F)
+library(patchwork, warn.conflicts = F)
+library(ggsci, warn.conflicts = F)
+```
+
+## (一)预备知识：读取数据及构建Seurat对象
+- 什么是Seurat对象？官网的解释是Seurat Object是一个容器container 
+- cellranger分析得到常见数据：名称需要固定：
+  - barcodes.tsv  区分细胞
+  - genes.tsv     基因信息，symbol，功能等
+  - matrix.mtx    基因表达矩阵
+```{r}
+single.data <- Read10X('data/GSM3972018/')
+CreateSeuratObject(counts = single.data,
+                   min.cells = 3, #过滤基因
+                   min.features = 200 # 过滤细胞
+                   ) -> seurat.ob1
+#其中assays：分析的意思，存放原始的count，
+glimpse(seurat.ob1) 
+#assays是一个列表，其中有一个RNA对象，RNA对象有8个属性，包含原始count，以及会存放标准化之后的data等等
+#既然assay放了RNA难道以后也可以放DNA之类的信息？发现其实是可以在assays中自定义
+glimpse(seurat.ob1@assays) 
+#细胞信息表，也就是普通转录组说的细胞信息表
+seurat.ob1@meta.data %>% head()
+#可以看到稀疏矩阵其实将0换成了.
+#head(seob@assays$RNA@counts)
+```
+- cellranger分析得到的h5文件以及直接从表达矩阵获取：
+```{r message=FALSE, warning=FALSE}
+# 构建Seurat对象和上面方法一致
+single.data2 <- Read10X_h5('data/GSM3489182/GSM3489182_Donor_01_filtered_gene_bc_matrices_h5.h5')
+single.data3 <- read.table('data/GSM2829942/GSM2829942_HE6W_LA.TPM.txt',
+                           row.names = 1,
+                           header = T)
+```
+
+## (二)基础分析：
+- 读入项目数据，并且合为一个Suerat对象
+```{r}
+sample_name <- basename(list.dirs('data/GSE96583/', recursive = F))
+seurat_list <- list()
+for(sample in sample_name){
+  seurat_data <- Read10X(str_c('data/GSE96583/', sample))
+  seurat_ob <- CreateSeuratObject(counts = seurat_data,
+                                  min.cell = 3,
+                                  min.features = 200)
+  seurat_ob@meta.data$sample = sample
+  seurat_list[[sample]] = seurat_ob
+}
+
+seob <- merge(x = seurat_list[[1]], 
+              y = seurat_list[-1],
+              #添加细胞前缀，防止合并之后存在相同的barcodes
+              add.cell.ids = names(seurat_list) 
+              )
+save(seob, file = 'results/seob_input.RData')
+load('results/seob_input.RData')
+glimpse(seob)
+dim(seob)
+```
+
+## (三)数据质控和过滤：
+- 主要是通过一下几个角度过滤细胞：
+  - 线粒体基因的转录本在每个细胞中总转录本的占比(这里其实看的不是转录本的count而是基因的count)
+  - 细胞中基因表达的个数
+### 线粒体占比：
+#### Seurat方法：
+```{r}
+load('results/seob_input.RData')
+#稀疏矩阵的行和列名，存在了Dimnames这个列表的两个元素中，但其实这个counts也是有的
+glimpse(seob@assays$RNA@counts@Dimnames);colnames(seob@assays$RNA@counts)[1:5];rownames(seob@assays$RNA@counts)[1:5]
+#？？筛选到线粒体基因，需要对稀疏矩阵操作，这里不知道怎么实现
+str_subset(seob@assays$RNA@counts@Dimnames[[1]], '^MT-')
+#seob这个对象默认被看到的是其实就是这个meta.data，可能和python中的__str__方法类似
+head(seob@meta.data);head(seob) 
+
+#ps:之前从来没有注意的点，data.frame[]一层括号取出的仍是data.frame,[[]]取出的是向量
+#ps:对data.frame[]赋值，需要接受data.frame，而data.frame[[]]赋值需要是向量等价于$
+#这里无法理解为何需要用双层括号而单层反而不行，
+#但是双层同样支持添加向量，也可以按照自己的理解加入线粒体信息，就很迷
+#总之通过PercentageFeatureSet这个函数可以算出某些基因(pattern指定模式，features直接给基因向量)在每个细胞中的占比
+
+# seob[['percent.mt']] <- PercentageFeatureSet(seob, pattern = '^MT-') #Seurat默认推荐的写法，但是看不懂
+# seob@meta.data$my.percent.mt1 <- PercentageFeatureSet(seob, pattern = '^MT-')$nCount_RNA
+# seob[['my.percent.mt2']] <- PercentageFeatureSet(seob, pattern = '^MT-')$nCount_RNA
+
+seob[['my.percent.mt']] <- PercentageFeatureSet(seob, pattern = '^MT-')$nCount_RNA;head(seob)
+```
+
+#### 如何自己算？
+```{r}
+# 试一试求线粒体的百分比，数据太大，但是也不是没有思路，可以列一列的求
+dim(seob@assays$RNA@counts)
+colnames(seob@assays$RNA@counts)[1:10]
+
+as.data.frame(seob@assays$RNA@counts[,1]) %>% 
+  rename(`ctrl_AAACATACAATGCC-1` = colnames(.)[1]) %>%
+  rownames_to_column(var = 'gene') -> tmp
+
+#基因的count总数2344
+tmp %>% 
+  summarise(sum(`ctrl_AAACATACAATGCC-1`)) 
+
+#线粒体基因的count总数46  
+tmp %>%
+  filter(str_detect(gene, '^MT-')) %>%
+  summarise(sum(`ctrl_AAACATACAATGCC-1`)) # 46
+
+#共有874个基因存在count
+tmp %>% 
+  filter(`ctrl_AAACATACAATGCC-1`>0) %>%
+  count()
+```
+
+#### 可选！加入细胞周期
+目的：为了防止细胞周期这个协变量对后续分析造成的影响，例如我们希望看到不同类型或者不同处理的细胞聚类到一起，但却发现细胞是按照细胞周期聚类就很尴尬，需要去除细胞周期这个协变量。
+方法：对每个细胞进行细胞周期打分，Seurat内部有`cc.genes`这个数据集，分别包好了人类细胞s期的marker基因以及g2m期的marker基因(有些物种细胞周期的基因研究的相对比较透彻)，根据细胞中这些marker的表达表达情况确定细胞的周期并给出相应得分。问题是，如果是非人和小鼠的如何计算？知道了细胞周期相关的marker基因有办法计算吗？
+```{r}
+#确认一下这些marker基因是否在我们的表达矩阵中，再进行打分，防止基因大小写错误的基因集等
+table(cc.genes$s.genes %in% rownames(seob@assays$RNA@counts))
+table(cc.genes$g2m.genes %in% rownames(seob@assays$RNA@counts))
+
+#这个函数输入一个seob并返回一个再meta.data中添加了细胞周期信息的seob
+CellCycleScoring(seob,
+                 s.features = cc.genes$s.genes,
+                 g2m.features = cc.genes$g2m.genes) -> seob
+glimpse(seob)
+```
+
+### 可视化
+```{r}
+#一般Seurat画图，会按照meta.data中的orig.ident分组，可在构建Seurat对象的project参数指定
+#思路：一般来讲，基因的数目和转录本的数目相关性较高。
+#      遇到一些很离散的细胞，最稳妥的是取出他们，通过marker基因进行注释，看这些细胞
+#      是否包含多个细胞marker，说明这个磁珠包含了多个细胞，如果是线粒体基因比例过高可考虑是什么组织
+VlnPlot(seob,
+        features = c('nCount_RNA','nFeature_RNA','my.percent.mt'),
+        group.by = 'sample')
+
+seob@meta.data %>%
+  pivot_longer(cols = c('nCount_RNA','nFeature_RNA','my.percent.mt'),
+               names_to = 'class', values_to = 'value') %>% 
+  ggplot(aes(x = sample, y = value)) +
+    geom_violin(aes(fill = sample)) +
+    scale_fill_nejm() +
+    geom_point(position = 'jitter', size = .05, alpha = .316) +
+    facet_wrap(~class, scales = 'free') +
+    labs(y = '', x = '') +
+    theme_classic() +
+    theme(legend.position = '',
+          text = element_text(size = 15, family = 'Times New Roman', face = 'bold'))
+
+RidgePlot(seob, 
+          features = c('nCount_RNA','nFeature_RNA','my.percent.mt'),
+          group.by = 'sample')
+
+FeatureScatter(seob,
+               feature1 = 'nCount_RNA',
+               feature2 = 'my.percent.mt',
+               group.by = 'sample') -> p1
+
+FeatureScatter(seob,
+               feature1 = 'nCount_RNA',
+               feature2 = 'nFeature_RNA',
+               group.by = 'sample') -> p2
+p1 + p2
+```
+
+### 过滤：
+```{r}
+# 这个过滤其实是很主观的，筛选并提取基因表达的数目不足200和少于2500并且线粒体基因含量小于10%的细胞
+dim(seob)
+subset(seob, 
+       subset = nFeature_RNA > 200 & 
+         nFeature_RNA < 2500 &
+         my.percent.mt < 10) -> seob_fltd
+dim(seob_fltd) #过滤了大概20个细胞
+save(seob_fltd, file = 'results/seob_fltd.RData')
+```
+
+## (四)数据预处理*****：
+思考：标准化是单独样本进行的，例如cmp，RPKM都是一个样本一个样本内进行的，由于TPM标准化之后样本和为1因此是可以用来衡量样本间的差异。因此，需要对合并的Seurat对象进行样本拆分分别进行标准化？但是我觉的是不需要拆分的，我认为这里的拆分只是为了后面的对齐整合。争议：有些观点认为不需要scale中心化，因为会导致所有的基因对差异的权重是一致；有些观点认为标准化应该采用TPM或者使用scran(非线性)进行标准化，使用scron对标准化进行评估；对是否需要log的争议，log可使数据近似于正太分布更符合分析工具对数据分布的假设，但同时可能会带来虚假的差异表达。
+- **标准化：测序深度以及基因长度对基因定量的影响。这里用的是Log很奇怪**
+- **筛选关注基因：筛选具有一定变化的基因作为后续的分析，一般保留1000-5000个基因分析，不然计算量过大，一般只有变化的基因才有必要分析，其他基因可能是噪点影响计算准确性和效率，一般就保留2000个。**
+- **整合数据：这里需要整合和先前的merge不同，这里的整合包含组间标准化的感觉，因此需要选定一些变化比较保守的基因，并认为这些基因表达在不同样本中变化不大，利用它们进行不同样本水平对齐之后将数据整合，认为这里整合后的数据可以组间比较。这里我觉得有点奇怪，为什么不直接使用TPM对每个样本进行标准化之后合并呢(Seurat标准化方法只有LogNormalize和SCT)？此外这个寻找anchor的过程是如何实现的呢，是直接筛选不同样本之间变化不大的基因吗？然后将他们作为对齐的标准吗？**
+- **整合后的数据进行scale中心化：拉到-1到1，这一个是对合并的数据进行操作，有的不推荐进行scale。**
+```{r echo=TRUE}
+load('results/seob_fltd.RData')
+seob_list <- SplitObject(seob_fltd, split.by = 'sample')
+glimpse(seob_list)
+for(i in names(seob_list)){
+  seob <- seob_list[[i]]
+  seob <- NormalizeData(seob, 
+                        normalization.method = 'LogNormalize')
+  seob <- FindVariableFeatures(seob,
+                             selection.method = 'vst',
+                             nfeatures = 1000)
+  seob_list[[i]] <- seob
+  rm(i, seob)
+}
+
+#经过NormalizeData和FindVariableFeatures可以看到
+#var.features是筛选的1000个基因
+#NormalizeData的结果可能放在了data里
+glimpse(seob_list$ctrl@assays$RNA) 
+seob_fltd@assays$RNA@counts[8:25,1:5]
+seob_list$ctrl@assays$RNA@counts[8:25,1:5]
+seob_list$ctrl@assays$RNA@data[8:25,1:5]
+
+# 返回一个IntegrationAnchorSet对象，
+# anchors <- FindIntegrationAnchors(object.list = seob_list,
+#                                   normalization.method = 'LogNormalize')
+# save(anchors, file = 'results/anchors.RData')
+load('results/anchors.RData')
+glimpse(anchors)
+
+#整合后的结果会存在新的assays的data中，问题是这个和整合前的data没有变化🤣
+seob_inte <- IntegrateData(anchorset = anchors,
+                           new.assay.name = 'IntegrateData')
+DefaultAssay(seob_inte) <- 'IntegrateData'
+glimpse(seob_inte)
+# seob_list$ctrl@assays$RNA@data[8:25,1:5]
+# seob_inte@assays$RNA@data[8:25,1:5]
+```
+
+```{r}
+load('results/seob_fltd.RData')
+# SCTrandform是新版Seurat推荐的方法，
+#  可以替代NormalizeData，FindVarivableFeatures，ScaleData
+#  variable.features.n一般用3000个
+seob_list_SCT <- SplitObject(seob_fltd, split.by = 'sample')
+rm(seob_fltd)
+for(i in names(seob_list_SCT)){
+  seob_list_SCT[[i]] <- SCTransform(
+    seob_list_SCT[[i]],
+    variable.features.n = 3000,
+    verbose = FALSE
+  )
+}
+glimpse(seob_list_SCT$ctrl@assays$RNA)
+#筛选用于整合的基因
+features_SCT <- SelectIntegrationFeatures(object.list = seob_list_SCT,
+                                          nfeatures = 2000)
+
+#可以理解为在seoblist中添加用于整合的属性，感觉这一步进行了样本内标准化了
+seob_list_SCT <- PrepSCTIntegration(object.list = seob_list_SCT)
+#寻找anchors,其中reference可以设置用list的哪一个元素作为基准
+anchors_SCT <- FindIntegrationAnchors(object.list = seob_list_SCT,
+                                      normalization.method = 'SCT',
+                                      anchor.features = features_SCT)
+save(seob_list_SCT, anchors_SCT, file = 'results/seob_SCT_Prep.RData')
+rm(list = ls())
+load('results/seob_SCT_Prep.RData')
+glimpse(seob_list_SCT$ctrl@assays)
+rm(seob_SCT, seob_list_SCT);gc()
+seob_SCT <- IntegrateData(anchors_SCT,
+                          normalization.method = 'SCT',
+                          new.assay.name = 'integrated_SCT')
+DefaultAssay(seob_SCT) <- 'integrated_SCT'
+save(seob_SCT, file = 'results/seob_SCT.RData')
+rm(list = ls());gc()
+load('results/seob_SCT.RData')
+
+#assays中包含了RNA，SCT，integrated_SCT
+#其中RNA，SCT应该只是粗暴的将不同样本拼在一起，整合是将相同基因的行进行整合
+#并且进行对齐消除批次效应
+#其中integrated_SCT可以理解为去除了批次效应整合的数据
+glimpse(seob_SCT)
+dim(seob_SCT@assays$RNA)
+dim(seob_SCT@assays$SCT)
+dim(seob_SCT@assays$integrated_SCT)
+```
+
+## (五)降维分析*****：
+- 可以检查数据是否存在协变量的影响，此外这一步可以放在最开始merge之后，看一下没有进行整合取出批次效应的原始数据的聚类情况，需要注意的是。我们希望的是同一类细胞聚在一起，那么就不应该是同一周期或者统一处理的细胞聚在一起(这两者在本研究中就是协变量)。但是，像普通转录组，我们需要比较不同处理，因此我们希望的是不同的处理聚在一起，那么其他的变量例如：身高，体重...就不应该聚类到一起(在这类研究中是协变量)。总之，我们的目的是什么：是希望我们的推断不受到其他变量的干扰。任何干扰项都是协变量，是需要去除的。
+- 在单细胞分析中PCA分析是基于HVG，首先需要明确需要保留多个PC做后续分析，一般标准化前20个就ok，但是SCT标准化比较敏感需要保留30个以上。PCA分析之前每一个基因分别描述了细胞之前的差异，PCA之后就转变为PC描述细胞的差异，而每个PC是一个特征向量包含一部分基因，这部分基因会对PC分别有贡献度。最终将每个基因对细胞差异的描述转变为几个PC对细胞差异的描述，而TSNE和UMAP都是基于PCA分析。下面p1-p4PCA的结果分别展示进行了数据矫正(处理批次)和没有进行数据矫正的降维分析结果，因此，拿到数据可以首先进行一个PCA分析看看没有进行矫正的数据是否存在批次，如果没有可以考虑跳过数据矫正，因为数据矫正的过程中会抹平细胞之间的差异。这里不展示其他降维分析的结果的批次，❗❗❗**总之注意：降维分析细胞之间被分开，我们需要知道这种分开是细胞类型的差异还是由于周期，批次等其他协变量导致的**
+```{r}
+load('results/seob_SCT.RData')
+glimpse(seob_SCT@reductions)
+
+#对assays@RNA进行PCA需要寻找RNA中的特征基因并且进行scale
+seob_SCT <- FindVariableFeatures(seob_SCT, 
+                                 selection.method = 'vst',
+                                 nfeatures = 2000, assay = 'RNA')
+seob_SCT <- ScaleData(object = seob_SCT, assay = 'RNA')
+
+#进行分析的时候，通过assay指定输入，通过reduction.name指定输出，通过key给个前缀方便画图
+seob_SCT <- RunPCA(seob_SCT, assay = 'integrated_SCT',  reduction.name = 'PCA_SCT', reduction.key = 'SCT_PC')
+seob_SCT <- RunPCA(seob_SCT, assay = 'RNA', reduction.name = 'PCA_RNA', reduction.key = 'RNA_PC')
+
+DimPlot(seob_SCT, reduction = 'PCA_SCT', group.by = 'sample') -> p1
+DimPlot(seob_SCT, reduction = 'PCA_RNA', group.by = 'sample') -> p2
+
+p1 + p2 + plot_layout(guides = 'collect')
+```
+
+```{r}
+#PCA，t-SNE，u-MAP等一系列降维分析结果
+ElbowPlot(seob_SCT, ndims = 50, reduction = 'PCA_SCT')
+
+seob_SCT <- RunTSNE(seob_SCT, reduction = 'PCA_SCT', reduction.name = 'tsne_SCT', dims = 1:30)
+seob_SCT <- RunUMAP(seob_SCT, reduction = 'PCA_SCT', reduction.name = 'umap_SCT', dims = 1:30)
+
+
+DimPlot(seob_SCT, reduction = 'tsne_SCT', group.by = 'sample') -> p3
+DimPlot(seob_SCT, reduction = 'umap_SCT', group.by = 'sample') -> p4
+
+p1 + p3 + p4 + plot_layout(guides = 'collect')
+save(seob_SCT, file = 'results/seob_SCT_reducted.RData')
+```
+
+
+## (六)聚类分析及细胞注释*****：
+- 聚类方法采用的是K-NN聚类，需基于PCA的结果，为何聚类？通过计算将距离较近的细胞归为一个cluster。分为两步首先是`FindNeighbors`然后是`FindClusters`，FindNeighbors的结果存放在graph中需要指定对哪个reduction进行，通过graph.name给每个结果命名，因此FindClusters需要指定对哪个graph进行聚类，其结果存放在metadata中。❗❗❗**注意：经过FindClusters之后metadata中会新增两列，一列为对应的`graph.name_分辨率`，另一列为seurat_clusters，因此seurat_clusters会被覆盖。**
+```{r}
+rm(list=ls());gc()
+load('results/seob_SCT_reducted.RData')
+seob_SCT <- FindNeighbors(seob_SCT, reduction = 'PCA_SCT',graph.name = 'graph_SCT',
+                          #k.param = 20, #最近的20个细胞性能不足的时候可以考虑
+                          dims = 1:30)
+seob_SCT <- FindNeighbors(seob_SCT, reduction = 'PCA_RNA',graph.name = 'graph_RNA',
+                          #k.param = 20, #最近的20个细胞性能不足的时候可以考虑
+                          dims = 1:30)
+
+#可能会遇到的情况：不知道使用多少分辨率这个时候可以多次FindCluster聚类然后根据后续的marker来确定分成多少最合理？
+seob_SCT <- FindClusters(seob_SCT, graph.name = 'graph_RNA',
+                         resolution = 0.3, #分辨率值越大，cluster越多
+                         random.seed = 1)
+seob_SCT <- FindClusters(seob_SCT, graph.name = 'graph_SCT',
+                         resolution = 0.3, #分辨率值越大，cluster越多
+                         summarise)
+seob_SCT <- FindClusters(seob_SCT, graph.name = 'graph_SCT',
+                         resolution = 0.1, #分辨率值越大，cluster越多
+                         random.seed = 1)
+table(seob_SCT@meta.data$graph_SCT_res.0.3)
+glimpse(seob_SCT)
+head(seob_SCT@meta.data)
+
+p1 <- DimPlot(seob_SCT,
+              reduction = 'PCA_RNA',
+              group.by = 'graph_RNA_res.0.3',
+              label = T)
+p2 <- DimPlot(seob_SCT,
+              reduction = 'PCA_SCT',
+              group.by = 'graph_SCT_res.0.3',
+              label = T)
+p3 <- DimPlot(seob_SCT,
+              reduction = 'tsne_SCT',
+              group.by = 'graph_SCT_res.0.3',
+              label = T)
+p4 <- DimPlot(seob_SCT,
+              reduction = 'umap_SCT',
+              group.by = 'graph_SCT_res.0.3',
+              label = T)
+
+(p1 + p2 )/(p3 + p4) + plot_layout(guides = 'collect')
+```
+- 细胞注释：通过umap以及点图(marker基因在各cluster中的表达水平以及百分比)确定cluster的细胞类型
+```{r}
+CellMarker_df <- read_csv("data/CellMarker.csv", col_types = cols(X3 = col_skip())) %>%
+  separate_rows(Cell_Marker, sep = ',') %>%
+  mutate(Cell_Type = str_remove_all(Cell_Type, ' ')) %>% distinct()
+
+p1 <- DimPlot(seob_SCT,
+              reduction = 'umap_SCT',
+              group.by = 'graph_SCT_res.0.3',
+              label = T)
+
+#设计到基因表达都用RNA中的数据，涉及到细胞的降维和聚类需要用Inte_SCT
+p2 <- DotPlot(seob_SCT,
+        features = unique(CellMarker_df$Cell_Marker)) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 8))
+p1 + p2 
+
+
+FeaturePlot(seob_SCT,
+            reduction = 'umap_SCT', #注意用的是哪一个降维的数据
+            features = c('GNLY','NKG7','CD3D','CD8A'),
+            #split.by = 'sample',
+            label = T)
+VlnPlot(object = seob_SCT,
+        features = c('GNLY','NKG7'),group.by ='graph_SCT_res.0.3' , #注意用的是个一个聚类
+        pt.size = .1,
+        assay = 'integrated_SCT'
+        #split.by = 'sample'
+        )
+glimpse(seob_SCT@assays$integrated_SCT)
+```
+
+```{r}
+#细胞注释：
+# 这里没有仔细划分直接就用的张老师的，可以按照这个一个个找如果一起看不太好看的话
+# 需要设置一个cluster对应的细胞类型，目的是再meta.data中新增一列细胞类型
+DotPlot(seob_SCT,
+        features = c('LYZ','CD14')) +
+  scale_color_gradient(low = 'grey', high = '#B22222') +
+  theme(axis.text.x = element_text(angle = 90,
+                                   hjust = 1,
+                                   size = 8))
+#第一种方法：
+cluster2type <- c(
+  "0"="CD14+ monocytes",
+  "1"="CD8+ T cells",
+  "2"="CD8+ T cells",
+  "3"="CD8+ T / NK cells",
+  "4"="NK cells",
+  "5"="CD8+ T cells",
+  "6"="B cells",
+  "7"="FCGR3A+ monocytes",
+  "8"="B cells",
+  "9"="Conventional dendritic cells",
+  "10"="Megakaryocytes", 
+  "11"="CD8+ T cells",
+  "12"="Plasmacytoid dendritic cells",
+  "13"="Erythrocytes"
+)
+#带名字的向量通过一层[]返回相应的带名字的元素，双层[[]]不带名称，但是双层只能取单个
+#多个可以通过unname得到不带名称的
+unname(cluster2type[seob_SCT@meta.data$graph_SCT_res.0.3]) %>% head() #赋值给新的一列就可以了
+
+#第二种方法：使用left_join
+cluster2type <- tibble::tribble(
+  ~cluster, ~cell_type,
+  "0", "CD14+ monocytes",
+  "1", "CD8+ T cells",
+  "2", "CD8+ T cells",
+  "3", "CD8+ T / NK cells",
+  "4", "NK cells",
+  "5", "CD8+ T cells",
+  "6", "B cells",
+  "7", "FCGR3A+ monocytes",
+  "8", "B cells",
+  "9", "Conventional dendritic cells",
+  "10", "Megakaryocytes", 
+  "11", "CD8+ T cells",
+  "12", "Plasmacytoid dendritic cells",
+  "13", "Erythrocytes"
+)
+unique(cluster2type$cell_type)
+#注意，left_join之后是没有行名的🤣
+seob_SCT@meta.data <- seob_SCT@meta.data %>%
+  rownames_to_column(var = 'barcodes') %>%
+  left_join(cluster2type, by = c('graph_SCT_res.0.3'='cluster')) %>%
+  column_to_rownames(var = 'barcodes')
+
+head(seob_SCT@meta.data)
+save(seob_SCT, file = 'results/seob_SCT_cluster_annoed.RData')
+```
+
+```{r}
+rm(list=ls());gc()
+load('results/seob_SCT_reducted.RData')
+#如何自己画umap以及小提琴图以及基因表达的umap图
+#感觉seurat自带的画图barcodes的表达矩阵使用的是SCT中scale.data，但是又和自带的图有差异。
+#❗❗❗目前的问题：一个是不确定自带的VlnPlot使用的是什么数据？
+#函数说其使用的是active.assay中的数据，然后我分别使用了integrated_SCT其中的data，scale.data均与自带图不一致
+#但是当我使用SCT的数据的时候时发现：与Seurat自带函数使用integrated_SCT比较一致，与Seurat自带函数使用SCT完全不一致
+#=====> 我的目的时明确，Seurat中的assay分别的作用，以及作者自带画图函数所使用的数据
+
+
+#提取integrated_SCT@data中的数据
+glimpse(unclass(seob_SCT@assays$integrated_SCT@data@x) %>% as.matrix()) %>% head()
+matrix(seob_SCT@assays$integrated_SCT@data@x, ncol = 2000) -> exper_
+colnames(exper_) <- seob_SCT@assays$integrated_SCT@data@Dimnames[[1]]
+rownames(exper_) <- seob_SCT@assays$integrated_SCT@data@Dimnames[[2]]
+exper_ %>% as.data.frame() %>% head()
+
+windowsFonts(TNM = windowsFont('Times New Roman'))
+getPalette = colorRampPalette(brewer.pal(9, "Set1"))
+
+metadata__ <- seob_SCT@meta.data %>% rownames_to_column(var = 'barcodes') %>%
+  select(barcodes, sample, graph_SCT_res.0.3) 
+
+as.data.frame(unclass(seob_SCT@reductions$umap_SCT@cell.embeddings)) %>% rownames_to_column(var = 'barcodes') %>%
+  left_join(metadata__, by = 'barcodes') -> plot_data
+  
+ggplot(plot_data, aes(x = UMAP_1, y = UMAP_2)) +
+  geom_point(aes(color = graph_SCT_res.0.3), size = .01) +
+  guides(colour = guide_legend(override.aes = list(size = 5), title = 'cluster')) +
+  scale_color_manual(values = getPalette(12)) +
+  theme_classic() +
+  theme(text = element_text(size = 13, family = 'TNM', face = 'bold'))
+
+
+unclass(unclass(seob_SCT@assays$SCT)@scale.data) %>%
+#exper_ %>% as.data.frame() %>%
+  t() %>% as.data.frame() %>%
+  rownames_to_column(var = 'barcodes') %>% 
+  pivot_longer(cols = -1, names_to = 'symbols', values_to = 'value') %>% 
+  dplyr::filter(symbols %in% c('GNLY','NKG7')) -> barcodes_expr
+
+plot_data %>% left_join(barcodes_expr, by = 'barcodes') %>%
+  ggplot(aes(x = graph_SCT_res.0.3, y = value, fill = graph_SCT_res.0.3)) + 
+    geom_violin(trim = TRUE, scale = 'width', adjust = 1) +
+    geom_jitter(height = 0, size = .01, show.legend = FALSE, alpha = .2) +
+    scale_fill_manual(values = getPalette(10)) +
+    facet_wrap(~symbols, scales = 'free')
+
+plot_data %>% left_join(barcodes_expr, by = 'barcodes') %>% 
+  ggplot(aes(x = UMAP_1, y = UMAP_2)) +
+    geom_point(aes(color = value)) +
+    scale_color_gradient(low = "grey", high = "#B22222") +
+    facet_wrap(~symbols, scales = 'free')
+```
+
+```{r}
+#===> 目的：探索一下Seurat对象中assays中的数据
+TransSeuratData2DataFrame <- function(ob){
+  # Seurat@assays$XXX@data => data.frame
+  # return -> data.frame
+  #   - colnames:gene symbol
+  #   - rownames:barcodes
+  tmp_matrix <- matrix(ob@data@i, ncol = ob@data@Dim[1])
+  rownames(tmp_matrix) <- ob@data@Dimnames[[2]]
+  colnames(tmp_matrix) <- ob@data@Dimnames[[1]]
+  return(as.data.frame(tmp_matrix))
+}
+  
+TransSeuratData2DataFrame(seob_SCT@assays$RNA)[80:84,100:104]
+TransSeuratData2DataFrame(seob_SCT@assays$SCT)[80:84,100:104]
+TransSeuratData2DataFrame(seob_SCT@assays$integrated_SCT)[80:84,100:104]
+
+glimpse(seob_SCT@assays)
+glimpse(seob_SCT@assays$RNA@data)
+glimpse(seob_SCT@assays$SCT@data)
+glimpse(seob_SCT@assays$integrated_SCT@data)
+14842*30581
+glimpse(seob_SCT@assays$integrated_SCT@data)
+(seob_SCT@assays$integrated_SCT@data)
+(seob_SCT@assays$integrated_SCT@scale.data)
+
+
+names(table(seob_SCT@assays$SCT@data@x))
+seob_SCT@assays$SCT@data@x[1:1000]
+glimpse(seob_SCT@assays$SCT@data)
+glimpse(seob_SCT@assays$SCT@scale.data)
+
+# assays:
+#   RNA:=>差异表达分析，基因表达相关的图
+#     counts：raw counts
+#       dim:16135 30581
+#     data：Normalized
+#     (去除测序深度和基因长度的影响) and log transform -> 细胞之间可比
+#       dim:16135 30581
+#     scale.data:scaled(做不做存在争议)
+#     (将基因的波动缩小到同一个范围内z-score) and centered(处理数据中位数，居中对齐)
+#       dim:2000 30581
+#
+#   SCT:回归了协变量(不关心的细胞周期，线粒体比例...)
+#     counts: 
+#       dim:14842 30581
+#     data:
+#       dim:14842 30581
+#     scale.data:
+#       dim:2000 30581
+#
+#   integrated_SCT:多样本整合去除了批次效应=>与细胞相关的分析，降维聚类分析等理解细胞关系距离等
+#     counts:
+#       dim:0 0
+#     data:
+#       dim:2000 30581
+#     scale.data:
+#       dim:2000 30581
+```
+
+## (七)差异表达分析*****：
+- 同种条件(处理)下：
+  - 两种不同细胞类型之间存在那些差异表达的基因->可以接解释解释细胞的功能？
+  - 一种细胞类型与其他所有细胞类型之间差异表达的基因
+- 不同条件下(处理)：
+  - 同一种细胞在不同处理下差异表达的基因
+```{r}
+load('results/seob_SCT_cluster_annoed.RData')
+
+glimpse(seob_SCT)
+DimPlot(seob_SCT, 
+        group.by = 'cell_type',
+        label = T, 
+        reduction = 'umap_SCT')
+
+ctrl_seob <- subset(seob_SCT,
+                    subset = sample == 'ctrl')
+stim_seob <- subset(seob_SCT,
+                    subset = sample == 'stim')
+dim(ctrl_seob)
+dim(stim_seob)
+
+clu1_vs_clu2_ctrl <- FindMarkers(ctrl_seob, ident.1 = 1, ident.2 = 2)
+clu1_vs_clu2_stim <- FindMarkers(stim_seob, ident.1 = 1, ident.2 = 2)
+
+#探究只在cluster1中差异表达的基因，可以理解为某一个类细胞特意差异表达？
+`%!in%` = Negate(`%in%`)
+clu1_seob <- subset(seob_SCT, subset = graph_SCT_res.0.3 == 1)
+Idents(clu1_seob) <- clu1_seob@meta.data$sample;glimpse(clu1_seob)
+stim_vs_ctrl_clu1 <- FindMarkers(clu1_seob, ident.1 = 'stim',  ident.2 = 'ctrl')
+Idents(seob_SCT) <- seob_SCT@meta.data$sample
+stim_vs_ctrl_all <- FindMarkers(seob_SCT, ident.1 = 'stim',  ident.2 = 'ctrl')
+
+stim_vs_ctrl_clu1 %>% 
+  rownames_to_column(var = 'gene_symbol') %>%
+  filter(gene_symbol %!in% rownames(stim_vs_ctrl_all),
+         gene_symbol %in% rownames(de_seob$ctrl),
+         gene_symbol %in% rownames(de_seob$stim)) %>%
+  arrange(desc(pct.1), pct.2)
+
+Idents(seob_SCT) <- seob_SCT@meta.data$graph_SCT_res.0.3
+FeaturePlot(seob_SCT, split.by = 'sample', 
+        features = 'RPS18', reduction = 'umap_SCT',
+        label = T)
+
+
+de_seob <- SplitObject(seob_SCT, split.by = 'sample')
+for(i in names(de_seob)){
+  de_seob[[i]] = FindMarkers(de_seob[[i]], ident.1 = 1)
+}
+
+
+glimpse(de_seob$ctrl@meta.data)
+
+
+clu1_vs_clu2_all <- FindMarkers(seob_SCT,
+                            ident.1 = 1)
+clu1_vs_clu2_all %>% arrange(desc(pct.1))
+clu1_vs_clu2 %>% arrange(desc(pct.1), pct.2)
+FeaturePlot(seob_SCT, split.by = 'sample', 
+        features = c('SELL', 'RPL13'), reduction = 'umap_SCT',
+        label = T)
+ls()
+rm(tmp_res)
+gc()
+Idents(ctrl_seob)
+```
+
+```{r}
+nk_cell_seob <- subset(seob_SCT,
+                       subset = cell_type == 'NK cells')
+Idents(nk_cell_seob) <- nk_cell_seob@meta.data$sample
+nk_cells_stim_vs_ctrl_markers <- FindMarkers(nk_cell_seob,
+            ident.1 = 'stim',
+            ident.2 = 'ctrl') # 处理这个condition下nk细胞差异表达的基因
+
+Idents(seob_SCT) <- seob_SCT@meta.data$cell_type
+nk_vs_all <- FindMarkers(
+  seob_SCT,
+  ident.1 = 'NK cells')
+
+`%!in%` = Negate(`%in%`)
+rownames(nk_cells_stim_vs_ctrl_markers)[rownames(nk_cells_stim_vs_ctrl_markers) 
+                                        %!in% rownames(nk_vs_all)]
+
+FeaturePlot(seob_SCT,
+            split.by = 'sample',
+            features = 'CD1D', label = T)
+rm(ctrl_seob, clu1_vs_clu2_all, clu1_vs_clu2)
+```
+
+## (八)拟时序分析：
+- Monocle3可以做标准化，去批次，降维，聚类，cluster比较，轨迹分析。有些文章一整套均分析都基于Monocle3，此开发团队开发的Garnett可以对Monocle3的结果进行细胞注释，但据说效果一般。
+
+
+```{r}
+#注意安装顺序，包与包之间存在依赖关系
+# BiocManager::install('dynwrap')
+# BiocManager::install('dynfeature')
+# BiocManager::install('dynplot')
+#一般无法安装直接下载源码本地安装
+# devtools::install_local('dynverse/dynguidelines-master.zip')
+# devtools::install_local('dynverse/dynmethods-master.zip')
+# devtools::install_local('dynverse/dyno-master.zip')
+library(dyno)
+library(tidyverse)
+library(SummarizedExperiment)
+```
+
+```{r}
+load('dynverse/mm_seob.rdata')
+#mm_seob中的数据并没有进行标准化
+mm_seob <- NormalizeData(mm_seob)
+glimpse(mm_seob@assays, max.level = 4)
+
+counts_data <- as.data.frame(mm_seob@assays$RNA@counts)
+data_data <- as.data.frame(mm_seob@assays$RNA@data)
+counts_data[1:5,1:5]
+data_data[1:5,1:5]
+```
+
+
+
+
+
+
